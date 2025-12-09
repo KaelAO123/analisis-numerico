@@ -1,6 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-/* eslint-disable react-hooks/static-components */
 /* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable react-hooks/static-components */
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
@@ -17,9 +17,10 @@ import {
   Eye,
   EyeOff,
   Grid,
-  Square
+  Square,
+  Move
 } from 'lucide-react'
-import { Point, generatePolynomialPoints, evaluateLagrange } from '@/lib/utils/math/lagrangeInterpolation'
+import { Point, generatePolynomialPoints } from '@/lib/utils/math/lagrangeInterpolation'
 import toast from 'react-hot-toast'
 
 interface LagrangeVisualizationProps {
@@ -46,9 +47,11 @@ export default function LagrangeVisualization({
   const [draggingPoint, setDraggingPoint] = useState<string | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [showCoordinates, setShowCoordinates] = useState(true)
+  const [draggingPosition, setDraggingPosition] = useState<{x: number, y: number} | null>(null)
   
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
+  const chartContainerRef = useRef<HTMLDivElement>(null)
 
   // Generar datos del polinomio
   useEffect(() => {
@@ -74,14 +77,14 @@ export default function LagrangeVisualization({
           const allYValues = [
             ...polynomialPoints.map(p => p.y),
             ...points.map(p => p.y)
-          ].filter(y => isFinite(y))
+          ].filter(y => isFinite(y) && Math.abs(y) < 1000) // Limitar valores extremos
           
           if (allYValues.length > 0) {
             const maxY = Math.max(...allYValues.map(Math.abs)) * 1.2
             const minY = Math.min(...allYValues) * 1.2
             const newYRange: [number, number] = [
-              Math.min(minY, -maxY),
-              Math.max(maxY, -minY)
+              Math.max(Math.min(minY, -maxY), -50),
+              Math.min(Math.max(maxY, -minY), 50)
             ]
             
             if (Math.abs(newYRange[0] - yRange[0]) > 0.1 || 
@@ -119,47 +122,69 @@ export default function LagrangeVisualization({
       const xValues = points.map(p => p.x)
       const minX = Math.min(...xValues)
       const maxX = Math.max(...xValues)
-      const padding = Math.max(2, (maxX - minX) * 0.5)
+      const padding = Math.max(2, (maxX - minX) * 0.3) // Reducir padding
       
       const newXRange: [number, number] = [
-        Math.min(minX - padding, -5),
-        Math.max(maxX + padding, 5)
+        Math.max(Math.min(minX - padding, -10), -20),
+        Math.min(Math.max(maxX + padding, 10), 20)
       ]
       
       setXRange(newXRange)
     }
   }, [points])
 
-  // Manejar arrastre de puntos
-  const handleMouseDown = useCallback((pointId: string) => {
-    setDraggingPoint(pointId)
-    toast('Arrastra el punto. Suelta para actualizar.', { duration: 2000 })
-  }, [])
-
-  const handleMouseMove = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
-    if (!draggingPoint || !containerRef.current || !svgRef.current) return
+  // Manejar arrastre de puntos - Método CORREGIDO
+  const handleMouseDown = useCallback((pointId: string, clientX: number, clientY: number) => {
+    if (!chartContainerRef.current) return
     
-    const containerRect = containerRef.current.getBoundingClientRect()
+    const rect = chartContainerRef.current.getBoundingClientRect()
+    const svgRect = svgRef.current?.getBoundingClientRect()
+    
+    if (!svgRect) return
+    
+    // Encontrar el punto actual
+    const point = points.find(p => p.id === pointId)
+    if (!point) return
+    
+    // Calcular posición relativa al SVG
+    const svgX = ((point.x - xRange[0]) / (xRange[1] - xRange[0])) * svgRect.width
+    const svgY = ((yRange[1] - point.y) / (yRange[1] - yRange[0])) * svgRect.height
+    
+    setDraggingPoint(pointId)
+    setDraggingPosition({ x: svgX, y: svgY })
+    
+    toast('Arrastra el punto. Suelta para actualizar.', { 
+      duration: 2000,
+      icon: '👆'
+    })
+  }, [points, xRange, yRange])
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!draggingPoint || !draggingPosition || !svgRef.current) return
+    
     const svgRect = svgRef.current.getBoundingClientRect()
     
-    // Convertir coordenadas del mouse a coordenadas del gráfico
-    const mouseX = e.clientX - svgRect.left
-    const mouseY = e.clientY - svgRect.top
+    // Calcular nueva posición en coordenadas del gráfico
+    const newSvgX = e.clientX - svgRect.left
+    const newSvgY = e.clientY - svgRect.top
     
-    // Convertir a valores del dominio/range de Recharts
-    const xPercent = mouseX / svgRect.width
-    const yPercent = mouseY / svgRect.height
+    // Convertir de coordenadas SVG a coordenadas del gráfico
+    const newX = xRange[0] + (newSvgX / svgRect.width) * (xRange[1] - xRange[0])
+    const newY = yRange[1] - (newSvgY / svgRect.height) * (yRange[1] - yRange[0])
     
-    const newX = xRange[0] + (xRange[1] - xRange[0]) * xPercent
-    const newY = yRange[0] + (yRange[1] - yRange[0]) * (1 - yPercent) // Invertir Y
+    // Limitar los valores para evitar valores extremos
+    const clampedX = Math.max(Math.min(newX, 20), -20)
+    const clampedY = Math.max(Math.min(newY, 50), -50)
     
-    // Actualizar punto
+    setDraggingPosition({ x: newSvgX, y: newSvgY })
+    
+    // Actualizar punto temporalmente
     const updatedPoints = points.map(p => {
       if (p.id === draggingPoint) {
         return {
           ...p,
-          x: parseFloat(newX.toFixed(2)),
-          y: parseFloat(newY.toFixed(2)),
+          x: parseFloat(clampedX.toFixed(2)),
+          y: parseFloat(clampedY.toFixed(2)),
           isDragging: true
         }
       }
@@ -169,71 +194,82 @@ export default function LagrangeVisualization({
     if (onPointsChange) {
       onPointsChange(updatedPoints)
     }
-  }, [draggingPoint, points, onPointsChange, xRange, yRange])
+  }, [draggingPoint, draggingPosition, points, onPointsChange, xRange, yRange])
 
   const handleMouseUp = useCallback(() => {
     if (draggingPoint) {
       setDraggingPoint(null)
+      setDraggingPosition(null)
+      
+      // Actualizar puntos finales sin el flag de dragging
       const updatedPoints = points.map(p => ({
         ...p,
         isDragging: false
       }))
+      
       if (onPointsChange) {
         onPointsChange(updatedPoints)
       }
-      toast.success('Punto actualizado')
+      
+      toast.success('Punto actualizado correctamente')
     }
   }, [draggingPoint, points, onPointsChange])
 
   // Agregar event listeners para arrastre
   useEffect(() => {
-    const handleGlobalMouseUp = () => {
-      if (draggingPoint) {
-        handleMouseUp()
-      }
-    }
-    
-    const handleGlobalMouseMove = (e: MouseEvent) => {
-      if (draggingPoint && svgRef.current) {
-        handleMouseMove(e as unknown as React.MouseEvent<SVGSVGElement>)
-      }
-    }
-    
     if (draggingPoint) {
-      window.addEventListener('mousemove', handleGlobalMouseMove)
-      window.addEventListener('mouseup', handleGlobalMouseUp)
+      window.addEventListener('mousemove', handleMouseMove)
+      window.addEventListener('mouseup', handleMouseUp)
     }
     
     return () => {
-      window.removeEventListener('mousemove', handleGlobalMouseMove)
-      window.removeEventListener('mouseup', handleGlobalMouseUp)
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
     }
   }, [draggingPoint, handleMouseMove, handleMouseUp])
 
+  // Manejar el inicio del arrastre desde el punto SVG
+  const handlePointMouseDown = (e: React.MouseEvent, pointId: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    handleMouseDown(pointId, e.clientX, e.clientY)
+  }
+
   const handleZoomIn = () => {
-    setXRange([xRange[0] * 0.8, xRange[1] * 0.8])
-    setYRange([yRange[0] * 0.8, yRange[1] * 0.8])
+    const centerX = (xRange[0] + xRange[1]) / 2
+    const centerY = (yRange[0] + yRange[1]) / 2
+    const width = (xRange[1] - xRange[0]) * 0.8
+    const height = (yRange[1] - yRange[0]) * 0.8
+    
+    setXRange([centerX - width/2, centerX + width/2])
+    setYRange([centerY - height/2, centerY + height/2])
   }
 
   const handleZoomOut = () => {
-    setXRange([xRange[0] * 1.2, xRange[1] * 1.2])
-    setYRange([yRange[0] * 1.2, yRange[1] * 1.2])
+    const centerX = (xRange[0] + xRange[1]) / 2
+    const centerY = (yRange[0] + yRange[1]) / 2
+    const width = (xRange[1] - xRange[0]) * 1.2
+    const height = (yRange[1] - yRange[0]) * 1.2
+    
+    setXRange([centerX - width/2, centerX + width/2])
+    setYRange([centerY - height/2, centerY + height/2])
   }
 
   const handleResetView = () => {
     if (points.length > 0) {
       const xValues = points.map(p => p.x)
       const yValues = points.map(p => p.y)
-      const padding = 2
+      const paddingX = Math.max(2, (Math.max(...xValues) - Math.min(...xValues)) * 0.3)
+      const paddingY = Math.max(2, (Math.max(...yValues) - Math.min(...yValues)) * 0.3)
       
       setXRange([
-        Math.min(...xValues) - padding,
-        Math.max(...xValues) + padding
+        Math.min(...xValues) - paddingX,
+        Math.max(...xValues) + paddingX
       ])
       
       setYRange([
-        Math.min(...yValues) - padding,
-        Math.max(...yValues) + padding
+        Math.min(...yValues) - paddingY,
+        Math.max(...yValues) + paddingY
       ])
     } else {
       setXRange([-5, 5])
@@ -295,8 +331,9 @@ export default function LagrangeVisualization({
                 </div>
               </div>
               {draggingPoint === data.pointId && (
-                <div className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-                  ← Arrastrando →
+                <div className="mt-2 text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                  <Move className="h-3 w-3" />
+                  Arrastrando
                 </div>
               )}
             </>
@@ -325,47 +362,51 @@ export default function LagrangeVisualization({
     return null
   }
 
-  // Renderizar punto personalizado
+  // Renderizar punto personalizado - CORREGIDO
   const renderCustomPoint = (props: any) => {
     const { cx, cy, payload } = props
     const point = points.find(p => p.id === payload.pointId)
     const isDragging = point?.isDragging
     const pointIndex = points.findIndex(p => p.id === payload.pointId) + 1
     
+    // Si el punto está siendo arrastrado, usar la posición del draggingPosition
+    const finalCx = isDragging && draggingPosition ? draggingPosition.x : cx
+    const finalCy = isDragging && draggingPosition ? draggingPosition.y : cy
+
     return (
       <g>
         <circle
-          cx={cx}
-          cy={cy}
-          r={isDragging ? 10 : 8}
+          cx={finalCx}
+          cy={finalCy}
+          r={isDragging ? 12 : 8}
           fill={isDragging ? "#f59e0b" : "#3b82f6"}
           stroke="#ffffff"
-          strokeWidth={isDragging ? 3 : 2}
+          strokeWidth={isDragging ? 4 : 2}
           style={{ cursor: 'grab' }}
-          onMouseDown={() => handleMouseDown(payload.pointId)}
-          className="hover:r-10 transition-all"
+          onMouseDown={(e) => handlePointMouseDown(e, payload.pointId)}
+          className="transition-all duration-150"
         />
         
         {showCoordinates && (
           <g>
             <text
-              x={cx}
-              y={cy - 15}
+              x={finalCx}
+              y={finalCy - 18}
               textAnchor="middle"
               fill={isDragging ? "#f59e0b" : "#374151"}
               fontSize={12}
               fontWeight="bold"
-              className="select-none"
+              className="select-none pointer-events-none"
             >
               {pointIndex}
             </text>
             <text
-              x={cx}
-              y={cy + 25}
+              x={finalCx}
+              y={finalCy + 28}
               textAnchor="middle"
               fill="#6b7280"
               fontSize={10}
-              className="select-none"
+              className="select-none pointer-events-none"
             >
               ({point?.x.toFixed(1)}, {point?.y.toFixed(1)})
             </text>
@@ -376,23 +417,25 @@ export default function LagrangeVisualization({
         {isDragging && (
           <g>
             <circle
-              cx={cx}
-              cy={cy}
-              r={12}
+              cx={finalCx}
+              cy={finalCy}
+              r={15}
               fill="transparent"
               stroke="#f59e0b"
               strokeWidth={2}
               strokeDasharray="5,5"
+              className="animate-pulse"
             />
             <circle
-              cx={cx}
-              cy={cy}
-              r={15}
+              cx={finalCx}
+              cy={finalCy}
+              r={20}
               fill="transparent"
               stroke="#f59e0b"
               strokeWidth={1}
               strokeDasharray="3,3"
               opacity={0.5}
+              className="animate-pulse"
             />
           </g>
         )}
@@ -406,26 +449,30 @@ export default function LagrangeVisualization({
       className="h-full flex flex-col bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden"
     >
       {/* Controles del gráfico */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 gap-4">
+        <div className="flex items-center flex-wrap gap-4">
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-            <span className="text-sm text-gray-700 dark:text-gray-300">Puntos</span>
+            <span className="text-sm text-gray-700 dark:text-gray-300">
+              Puntos ({points.length})
+            </span>
           </div>
           
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-purple-500"></div>
-            <span className="text-sm text-gray-700 dark:text-gray-300">Polinomio</span>
+            <span className="text-sm text-gray-700 dark:text-gray-300">
+              Polinomio (grado {Math.max(0, points.length - 1)})
+            </span>
           </div>
           
-          <div className="flex items-center gap-2 ml-4">
-            <span className="text-sm text-gray-600 dark:text-gray-400">
-              {points.length} punto{points.length !== 1 ? 's' : ''}
-            </span>
-            <span className="text-sm text-gray-600 dark:text-gray-400">
-              • Grado: {Math.max(0, points.length - 1)}
-            </span>
-          </div>
+          {draggingPoint && (
+            <div className="flex items-center gap-2 px-3 py-1 bg-amber-100 dark:bg-amber-900/30 rounded-full">
+              <div className="h-2 w-2 rounded-full bg-amber-500 animate-pulse"></div>
+              <span className="text-sm text-amber-700 dark:text-amber-300">
+                Arrastrando punto
+              </span>
+            </div>
+          )}
         </div>
         
         <div className="flex items-center gap-2">
@@ -463,7 +510,7 @@ export default function LagrangeVisualization({
           {/* Controles de zoom */}
           <button
             onClick={handleZoomOut}
-            className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
+            className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 transition-colors"
             title="Zoom Out"
           >
             <ZoomOut className="h-4 w-4" />
@@ -471,7 +518,7 @@ export default function LagrangeVisualization({
           
           <button
             onClick={handleResetView}
-            className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
+            className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 transition-colors"
             title="Restablecer vista"
           >
             <Target className="h-4 w-4" />
@@ -479,7 +526,7 @@ export default function LagrangeVisualization({
           
           <button
             onClick={handleZoomIn}
-            className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
+            className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 transition-colors"
             title="Zoom In"
           >
             <ZoomIn className="h-4 w-4" />
@@ -487,7 +534,7 @@ export default function LagrangeVisualization({
           
           <button
             onClick={toggleFullscreen}
-            className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
+            className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 transition-colors"
             title={isFullscreen ? 'Salir de pantalla completa' : 'Pantalla completa'}
           >
             {isFullscreen ? (
@@ -500,14 +547,16 @@ export default function LagrangeVisualization({
       </div>
 
       {/* Área del gráfico */}
-      <div className="flex-1 p-4">
+      <div 
+        ref={chartContainerRef}
+        className="flex-1 p-4 relative"
+        style={{ touchAction: 'none' }} // Previene scroll en móvil al arrastrar
+      >
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
             ref={svgRef}
             data={graphData.filter(d => d.type === 'polynomial')}
             margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
           >
             {showGrid && (
               <CartesianGrid 
@@ -532,6 +581,7 @@ export default function LagrangeVisualization({
                 offset: -10,
                 fill: '#6b7280'
               }}
+              allowDataOverflow={true}
             />
             
             <YAxis 
@@ -547,6 +597,7 @@ export default function LagrangeVisualization({
                 offset: 10,
                 fill: '#6b7280'
               }}
+              allowDataOverflow={true}
             />
 
             <Tooltip content={<CustomTooltip />} />
@@ -563,6 +614,7 @@ export default function LagrangeVisualization({
                 name="Polinomio de Lagrange"
                 activeDot={{ r: 6, fill: '#8b5cf6' }}
                 isAnimationActive={!draggingPoint}
+                connectNulls={true}
               />
             )}
 
@@ -591,27 +643,32 @@ export default function LagrangeVisualization({
               strokeDasharray="3 3"
               opacity={0.5}
             />
-
-            {/* Líneas verticales en cada punto (si hay pocos puntos) */}
-            {points.length <= 5 && points.map((point, index) => (
-              <ReferenceLine
-                key={`vline-${point.id}`}
-                x={point.x}
-                stroke="#3b82f6"
-                strokeWidth={1}
-                strokeDasharray="5 5"
-                opacity={0.3}
-              />
-            ))}
           </LineChart>
         </ResponsiveContainer>
+        
+        {/* Overlay para instrucciones */}
+        {points.length === 0 && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/5 dark:bg-white/5 rounded-lg">
+            <div className="text-center p-8 max-w-md">
+              <div className="inline-flex p-4 rounded-full bg-blue-100 dark:bg-blue-900/30 mb-4">
+                <Move className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+              </div>
+              <h3 className="font-semibold text-gray-900 dark:text-white mb-2">
+                Agrega puntos para comenzar
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 text-sm">
+                Usa el panel izquierdo para agregar puntos, luego arrástralos aquí para ver cómo cambia el polinomio.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Información y controles inferiores */}
       <div className="border-t border-gray-200 dark:border-gray-700 p-4 bg-gray-50 dark:bg-gray-900/50">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
           <div className="flex-1">
-            <div className="flex items-center gap-4 mb-2">
+            <div className="flex flex-wrap items-center gap-4 mb-2">
               <div className="text-sm">
                 <span className="text-gray-600 dark:text-gray-400">Rango X: </span>
                 <span className="font-mono text-gray-900 dark:text-white">
@@ -628,25 +685,29 @@ export default function LagrangeVisualization({
             </div>
             
             {draggingPoint && (
-              <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-sm">
+              <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 text-sm bg-amber-50 dark:bg-amber-900/20 px-3 py-1.5 rounded-lg">
                 <div className="h-2 w-2 rounded-full bg-amber-500 animate-pulse"></div>
-                <span>Modo arrastre activo - mueve el punto y suelta para actualizar</span>
+                <span>Arrastrando punto - mueve el ratón y suelta para actualizar</span>
               </div>
             )}
           </div>
           
-          <div className="flex flex-wrap gap-2">
-            <div className="text-xs text-gray-500 dark:text-gray-400">
-              {points.length >= 2 ? (
+          <div className="text-xs text-gray-500 dark:text-gray-400">
+            {points.length >= 2 ? (
+              <div className="flex items-center gap-2">
+                <div className="h-2 w-2 rounded-full bg-green-500"></div>
                 <span className="text-green-600 dark:text-green-400">
-                  ✓ Polinomio de grado {points.length - 1}
+                  Polinomio de grado {points.length - 1} activo
                 </span>
-              ) : (
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <div className="h-2 w-2 rounded-full bg-amber-500"></div>
                 <span className="text-amber-600 dark:text-amber-400">
                   Agrega al menos 2 puntos
                 </span>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
         
@@ -654,8 +715,8 @@ export default function LagrangeVisualization({
         {points.length > 0 && (
           <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
             <p className="text-xs text-gray-600 dark:text-gray-400">
-              💡 <span className="font-medium">Haz clic y arrastra</span> cualquier punto para moverlo. 
-              El polinomio se actualizará automáticamente.
+              💡 <span className="font-medium">Haz clic y arrastra</span> cualquier punto azul para moverlo. 
+              El polinomio morado se actualizará automáticamente. Los puntos amarillos están siendo arrastrados.
             </p>
           </div>
         )}

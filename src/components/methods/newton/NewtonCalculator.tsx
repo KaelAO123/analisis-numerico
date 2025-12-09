@@ -1,11 +1,8 @@
-/* eslint-disable react-hooks/set-state-in-effect */
-/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Calculator, RefreshCw, Play, Zap, AlertCircle } from 'lucide-react'
+import { useState } from 'react'
+import { Calculator, RefreshCw, Play, Zap } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { evaluate, derivative } from 'mathjs'
 
 interface NewtonCalculatorProps {
   functionInput: string
@@ -18,7 +15,6 @@ interface NewtonCalculatorProps {
   onInitialGuessChange: (value: number) => void
   onToleranceChange: (value: number) => void
   onMaxIterationsChange: (value: number) => void
-  onCalculate?: () => void
 }
 
 export default function NewtonCalculator({
@@ -31,45 +27,9 @@ export default function NewtonCalculator({
   onDerivativeChange,
   onInitialGuessChange,
   onToleranceChange,
-  onMaxIterationsChange,
-  onCalculate
+  onMaxIterationsChange
 }: NewtonCalculatorProps) {
   const [isCalculating, setIsCalculating] = useState(false)
-  const [functionError, setFunctionError] = useState('')
-  const [derivativeError, setDerivativeError] = useState('')
-
-  // Validar función cuando cambia
-  useEffect(() => {
-    if (!functionInput.trim()) {
-      setFunctionError('Ingresa una función')
-      return
-    }
-
-    try {
-      // Intentar parsear la función
-      const testExpression = functionInput.replace(/x/g, '1')
-      evaluate(testExpression)
-      setFunctionError('')
-    } catch (error: any) {
-      setFunctionError('Sintaxis inválida. Usa: x^2, sin(x), exp(x), etc.')
-    }
-  }, [functionInput])
-
-  // Validar derivada cuando cambia
-  useEffect(() => {
-    if (!derivativeInput.trim()) {
-      setDerivativeError('')
-      return
-    }
-
-    try {
-      const testExpression = derivativeInput.replace(/x/g, '1')
-      evaluate(testExpression)
-      setDerivativeError('')
-    } catch (error: any) {
-      setDerivativeError('Sintaxis inválida')
-    }
-  }, [derivativeInput])
 
   const exampleFunctions = [
     { label: 'x² - 4', f: 'x^2 - 4', df: '2*x' },
@@ -85,30 +45,8 @@ export default function NewtonCalculator({
   }
 
   const handleCalculate = () => {
-    // Validar antes de calcular
-    if (functionError || !functionInput.trim()) {
-      toast.error('Corrige la función antes de calcular')
-      return
-    }
-
-    if (derivativeInput && derivativeError) {
-      toast.error('Corrige la derivada antes de calcular')
-      return
-    }
-
-    if (isNaN(initialGuess) || initialGuess < -100 || initialGuess > 100) {
-      toast.error('Valor inicial inválido. Usa valores entre -100 y 100')
-      return
-    }
-
     setIsCalculating(true)
-    
-    // Si hay un callback del padre, usarlo
-    if (onCalculate) {
-      onCalculate()
-    }
-    
-    // Simular cálculo
+    // Simular cálculo (la lógica real está en el componente padre)
     setTimeout(() => {
       setIsCalculating(false)
       toast.success('Cálculo completado')
@@ -122,54 +60,6 @@ export default function NewtonCalculator({
     onToleranceChange(0.0001)
     onMaxIterationsChange(10)
     toast.success('Valores restablecidos')
-  }
-
-  const calculateDerivative = () => {
-    if (!functionInput.trim()) {
-      toast.error('Ingresa una función primero')
-      return
-    }
-
-    try {
-      // Usar math.js para calcular la derivada simbólica
-      let expr = functionInput
-      
-      // Reemplazar exponentes para math.js
-      expr = expr.replace(/(\d+)\^(\d+)/g, 'pow($1, $2)')
-      expr = expr.replace(/x\^(\d+)/g, 'pow(x, $1)')
-      
-      // Calcular derivada
-      const deriv = derivative(expr, 'x').toString()
-      
-      // Convertir de nuevo a notación amigable
-      const friendlyDeriv = deriv
-        .replace(/pow\(x, (\d+)\)/g, 'x^$1')
-        .replace(/pow\((\d+), (\d+)\)/g, '$1^$2')
-        .replace(/\*/g, '')
-        .replace(/(\d)(x)/g, '$1*$2')
-        .replace(/(x)(\d)/g, '$1*$2')
-        .replace(/\((\d+)\)/g, '$1')
-      
-      onDerivativeChange(friendlyDeriv)
-      toast.success('Derivada calculada automáticamente')
-    } catch (error: any) {
-      console.error('Error calculando derivada:', error)
-      
-      // Fallback para casos simples
-      if (functionInput.includes('x^')) {
-        const match = functionInput.match(/x\^(\d+)/)
-        if (match) {
-          const power = parseInt(match[1])
-          const newDerivative = `${power}*x^${power - 1}`
-          onDerivativeChange(newDerivative)
-          toast.success('Derivada calculada (caso simple)')
-        } else {
-          toast.error('No se pudo calcular la derivada automáticamente')
-        }
-      } else {
-        toast.error('Ingresa una función con variable x')
-      }
-    }
   }
 
   return (
@@ -205,63 +95,32 @@ export default function NewtonCalculator({
             type="text"
             value={functionInput}
             onChange={(e) => onFunctionChange(e.target.value)}
-            className={`w-full pl-16 pr-4 py-3 bg-gray-50 dark:bg-gray-900 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-600 dark:focus:border-blue-600 ${
-              functionError 
-                ? 'border-red-300 dark:border-red-700' 
-                : 'border-gray-300 dark:border-gray-700'
-            }`}
+            className="w-full pl-16 pr-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-600 dark:focus:border-blue-600"
             placeholder="x^2 - 4"
           />
         </div>
-        {functionError ? (
-          <div className="flex items-center gap-1 mt-1 text-red-600 dark:text-red-400 text-xs">
-            <AlertCircle className="h-3 w-3" />
-            {functionError}
-          </div>
-        ) : (
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            Usa sintaxis: x^2, sin(x), cos(x), exp(x), log(x), sqrt(x), etc.
-          </p>
-        )}
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          Usa sintaxis de math.js: x^2, sin(x), exp(x), log(x), etc.
+        </p>
       </div>
 
       {/* Entrada de derivada */}
       <div>
-        <div className="flex items-center justify-between mb-2">
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-            Derivada f&apos;(x)
-          </label>
-          <button
-            onClick={calculateDerivative}
-            className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 flex items-center gap-1"
-            type="button"
-          >
-            <Zap className="h-3 w-3" />
-            Calcular automáticamente
-          </button>
-        </div>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          Derivada f'(x) (opcional - se puede calcular automáticamente)
+        </label>
         <div className="relative">
           <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
-            f&apos;(x) =
+            f'(x) =
           </div>
           <input
             type="text"
             value={derivativeInput}
             onChange={(e) => onDerivativeChange(e.target.value)}
-            className={`w-full pl-16 pr-4 py-3 bg-gray-50 dark:bg-gray-900 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-600 dark:focus:border-blue-600 ${
-              derivativeError 
-                ? 'border-red-300 dark:border-red-700' 
-                : 'border-gray-300 dark:border-gray-700'
-            }`}
-            placeholder="2*x (opcional - se calculará si está vacío)"
+            className="w-full pl-16 pr-4 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:focus:ring-blue-600 dark:focus:border-blue-600"
+            placeholder="2*x"
           />
         </div>
-        {derivativeError && (
-          <div className="flex items-center gap-1 mt-1 text-red-600 dark:text-red-400 text-xs">
-            <AlertCircle className="h-3 w-3" />
-            {derivativeError}
-          </div>
-        )}
       </div>
 
       {/* Parámetros */}
@@ -273,18 +132,10 @@ export default function NewtonCalculator({
           <input
             type="number"
             value={initialGuess}
-            onChange={(e) => {
-              const value = parseFloat(e.target.value)
-              if (!isNaN(value) && value >= -100 && value <= 100) {
-                onInitialGuessChange(value)
-              }
-            }}
+            onChange={(e) => onInitialGuessChange(parseFloat(e.target.value) || 0)}
             step="0.1"
             className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           />
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            Entre -100 y 100
-          </p>
         </div>
 
         <div>
@@ -294,20 +145,11 @@ export default function NewtonCalculator({
           <input
             type="number"
             value={tolerance}
-            onChange={(e) => {
-              const value = parseFloat(e.target.value)
-              if (!isNaN(value) && value > 0 && value <= 1) {
-                onToleranceChange(value)
-              }
-            }}
+            onChange={(e) => onToleranceChange(parseFloat(e.target.value) || 0.0001)}
             step="0.0001"
             min="0.0000001"
-            max="1"
             className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           />
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            1e-7 a 1
-          </p>
         </div>
 
         <div>
@@ -317,19 +159,11 @@ export default function NewtonCalculator({
           <input
             type="number"
             value={maxIterations}
-            onChange={(e) => {
-              const value = parseInt(e.target.value)
-              if (!isNaN(value) && value >= 1 && value <= 1000) {
-                onMaxIterationsChange(value)
-              }
-            }}
+            onChange={(e) => onMaxIterationsChange(parseInt(e.target.value) || 10)}
             min="1"
-            max="1000"
+            max="100"
             className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           />
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            1 a 1000
-          </p>
         </div>
       </div>
 
@@ -337,9 +171,7 @@ export default function NewtonCalculator({
       <div className="space-y-4">
         <div>
           <div className="flex justify-between mb-1">
-            <span className="text-sm text-gray-600 dark:text-gray-400">
-              Valor inicial: {initialGuess.toFixed(2)}
-            </span>
+            <span className="text-sm text-gray-600 dark:text-gray-400">Valor inicial: {initialGuess.toFixed(2)}</span>
             <span className="text-sm text-gray-500">[-10, 10]</span>
           </div>
           <input
@@ -366,12 +198,7 @@ export default function NewtonCalculator({
             max="-2"
             step="0.1"
             value={Math.log10(tolerance)}
-            onChange={(e) => {
-              const logValue = parseFloat(e.target.value)
-              if (!isNaN(logValue)) {
-                onToleranceChange(Math.pow(10, logValue))
-              }
-            }}
+            onChange={(e) => onToleranceChange(Math.pow(10, parseFloat(e.target.value)))}
             className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer"
           />
         </div>
@@ -381,7 +208,7 @@ export default function NewtonCalculator({
       <div className="flex gap-3 pt-4">
         <button
           onClick={handleCalculate}
-          disabled={isCalculating || !!functionError}
+          disabled={isCalculating}
           className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white font-semibold rounded-lg hover:from-blue-700 hover:to-cyan-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isCalculating ? (
@@ -400,36 +227,27 @@ export default function NewtonCalculator({
         <button
           onClick={handleReset}
           className="px-4 py-3 bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-medium rounded-lg hover:bg-gray-300 dark:hover:bg-gray-700 transition-colors"
-          type="button"
         >
           <RefreshCw className="h-5 w-5" />
         </button>
 
         <button
-          onClick={calculateDerivative}
-          disabled={!functionInput.trim() || !!functionError}
-          className="px-4 py-3 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 font-medium rounded-lg hover:bg-purple-200 dark:hover:bg-purple-900/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          type="button"
-          title="Calcular derivada automáticamente"
+          onClick={() => {
+            // Auto-calcular derivada (implementación básica)
+            if (functionInput.includes('x^')) {
+              const base = functionInput.match(/x\^(\d+)/)?.[1]
+              if (base) {
+                const power = parseInt(base)
+                const newDerivative = `${power}*x^${power - 1}`
+                onDerivativeChange(newDerivative)
+                toast.success('Derivada calculada automáticamente')
+              }
+            }
+          }}
+          className="px-4 py-3 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 font-medium rounded-lg hover:bg-purple-200 dark:hover:bg-purple-900/50 transition-colors"
         >
           <Zap className="h-5 w-5" />
         </button>
-      </div>
-
-      {/* Instrucciones */}
-      <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-        <div className="flex items-start gap-2 text-sm text-gray-600 dark:text-gray-400">
-          <Calculator className="h-4 w-4 mt-0.5 flex-shrink-0" />
-          <div>
-            <p className="font-medium mb-1">Instrucciones:</p>
-            <ol className="list-decimal list-inside space-y-1">
-              <li>Ingresa la función f(x) o selecciona un ejemplo</li>
-              <li>La derivada f&apos;(x) se puede calcular automáticamente</li>
-              <li>Ajusta los parámetros según necesites</li>
-              <li>Haz clic en &quot;Calcular Raíz&quot; para ver resultados</li>
-            </ol>
-          </div>
-        </div>
       </div>
     </div>
   )
