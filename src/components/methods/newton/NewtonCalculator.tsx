@@ -107,11 +107,11 @@ export default function NewtonCalculator({
       {/* Entrada de derivada */}
       <div>
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Derivada f'(x) (opcional - se puede calcular automáticamente)
+          Derivada f&apos;(x) (opcional - se puede calcular automáticamente)
         </label>
         <div className="relative">
           <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
-            f'(x) =
+            f&apos;(x) =
           </div>
           <input
             type="text"
