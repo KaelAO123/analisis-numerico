@@ -33,7 +33,7 @@ export default function NewtonVisualization({
   const [iterationPoints, setIterationPoints] = useState<GraphPoint[]>([])
   const [xRange, setXRange] = useState<[number, number]>([-5, 5])
   const [yRange, setYRange] = useState<[number, number]>([-10, 10])
-  const animationRef = useRef<NodeJS.Timeout>()
+  const animationRef = useRef<NodeJS.Timeout | null>(null)
 
   // Calcular resultados
   const result = newtonRaphson(functionStr, derivativeStr, initialGuess, 0.0001, 10)

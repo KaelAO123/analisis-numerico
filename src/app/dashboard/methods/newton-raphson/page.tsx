@@ -54,7 +54,6 @@ export default function NewtonRaphsonPage() {
               onInitialGuessChange={setInitialGuess}
               onToleranceChange={setTolerance}
               onMaxIterationsChange={setMaxIterations}
-              onCalculate={handleCalculate}
             />
           </div>
 

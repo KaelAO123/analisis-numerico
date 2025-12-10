@@ -607,11 +607,10 @@ export default function ExamplesPage() {
                 </div>
               </div>
             </motion.div>
-          ))}
-        </div>
+          )
+        })}
       </motion.div>
-
-      {/* Sección Educativa */}
+      
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
